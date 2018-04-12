@@ -7,9 +7,9 @@ This script pads a pair of coordinates by a given ammount, e.g. padding coordina
 
 ## INSTALLATION
 
-perl Makefile.PL
-make
-sudo make install
+    perl Makefile.PL
+    make
+    sudo make install
 
 ## USAGE
 
