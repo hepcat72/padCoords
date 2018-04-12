@@ -21,7 +21,7 @@ Example (tab delimited: 2 columns of coordinates):
 
     6   100
     105 222
-    252 404
+    404 252
 
 ## OUTPUT
 
@@ -29,4 +29,4 @@ Example with -s 10:
 
     1   110
     95  232
-    242 414
+    414 242
