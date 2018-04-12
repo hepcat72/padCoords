@@ -13,7 +13,7 @@ This script pads a pair of coordinates by a given ammount, e.g. padding coordina
 
 ## USAGE
 
-padCoords.pl -s 10 coord_file
+    padCoords.pl -s 10 coord_file
 
 ## INPUT
 
