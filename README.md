@@ -19,12 +19,12 @@ padCoords.pl -s 10 coord_file
 
 Example (tab delimited: 2 columns of coordinates):
 
-6   100
-105 222
-252 404
+    6   100
+    105 222
+    252 404
 
 ## OUTPUT (with -s 10)
 
-1   110
-95  232
-242 414
+    1   110
+    95  232
+    242 414
