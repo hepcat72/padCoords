@@ -3,7 +3,7 @@ Expand coordinates in a tab-delimited file, regardless of coordinate order.
 
 ## WHAT IS THIS:
 
-This script pads a pair of coordinates by a given ammount, e.g. padding coordinates 200,300 by 100 would change the coordinates to 100,400.  Order of the coordinates is unimportant, e.g. padding 300,200 by 100 would yield 400,100.
+This script pads a pair of coordinates by a given amount, e.g. padding coordinates 200,300 by 100 would change the coordinates to 100,400.  Order of the coordinates is unimportant, e.g. padding 300,200 by 100 would yield 400,100.
 
 ## INSTALLATION
 
