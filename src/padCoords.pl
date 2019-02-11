@@ -13,7 +13,7 @@
 
 use CommandLineInterface;
 
-setScriptInfo(VERSION => '2.0',
+setScriptInfo(VERSION => '2.1',
               CREATED => 'circa 2010',
               AUTHOR  => 'Robert William Leach',
               CONTACT => 'rleach@princeton.edu',
@@ -99,7 +99,6 @@ processCommandLine();
 if($s < 0)
   {
     error("Invalid pad size (-s): [$s]");
-    usage(1);
     quit(1);
   }
 
@@ -123,7 +122,6 @@ if(defined($startcol))
     if($startcol =~ /\D/ || $startcol eq '')
       {
 	error("Invalid column 1 (-c): [$startcol]");
-	usage(1);
 	quit(2);
       }
     else
@@ -135,7 +133,6 @@ if(defined($stopcol))
     if($stopcol =~ /\D/ || $stopcol eq '')
       {
 	error("Invalid column 2 (-d): [$stopcol]");
-	usage(1);
 	quit(2);
       }
     else
