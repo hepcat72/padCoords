@@ -13,12 +13,14 @@
 
 use CommandLineInterface;
 
-setScriptInfo(VERSION => '2.1',
+our $VERSION = '2.2';
+
+setScriptInfo(VERSION => $VERSION,
               CREATED => 'circa 2010',
               AUTHOR  => 'Robert William Leach',
               CONTACT => 'rleach@princeton.edu',
               COMPANY => 'Princeton University',
-              LICENSE => 'Copyright 2018',
+              LICENSE => 'Copyright 2019',
               HELP    => ('This script pads a pair of coordinates by a ' .
 			  'given ammount, e.g. padding coordinates 200,300 ' .
 			  'by 100 would change the coordinates to 100,400.  ' .
@@ -45,7 +47,7 @@ my $iid = addInfileOption(GETOPTKEY   => 'i|infile=s',
 					  'always be expanded outward.'));
 
 my($s);
-addOption(GETOPTKEY   => 's|size|pad=i',
+addOption(GETOPTKEY   => 's|size|p|pad=i',
 	  GETOPTVAL   => \$s,
 	  REQUIRED    => 1,
 	  SMRY_DESC   => 'Pad ammount.',
@@ -53,6 +55,34 @@ addOption(GETOPTKEY   => 's|size|pad=i',
 			  'the lesser coordinate and added to the greater ' .
 			  'coordinate (whichever coordinate column they are ' .
 			  'in).'));
+
+my $add_col_strategy = 'insert';
+addOption(GETOPTKEY   => 'add-stop-strategy',
+	  GETOPTVAL   => \$add_col_strategy,
+	  TYPE        => 'enum',
+	  REQUIRED    => 0,
+	  ADVANCED    => 1,
+	  DEFAULT     => $add_col_strategy,
+	  ACCEPTS     => ['delimiter','insert'],
+	  SMRY_DESC   => 'How to add a stop when padding 1 coordinate column.',
+	  DETAIL_DESC => ('If padding a single coordinate, join the ' .
+			  'coordinates in the same column with an --add-stop-' .
+			  'delimiter or insert an extra column where the ' .
+			  'coordinate column currently is.  Note, the ' .
+			  'original column coordinate value is changed in ' .
+			  'all cases.'));
+
+my $delimiter = '..';
+addOption(GETOPTKEY   => 'add-stop-delimiter',
+	  GETOPTVAL   => \$delimiter,
+	  TYPE        => 'string',
+	  REQUIRED    => 0,
+	  ADVANCED    => 1,
+	  DEFAULT     => $delimiter,
+	  SMRY_DESC   => 'Delimiter to use when padding a single coordinate.',
+	  DETAIL_DESC => ('If --add-stop-strategy is "delimiter", use this ' .
+			  'delimiter when joining padded coordinates in a ' .
+			  'single column.'));
 
 my($startcol,$stopcol);
 my $coordcols = [];
@@ -66,12 +96,7 @@ addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns|start-col|stop-col=s',
 			       'Either supply twice (once for each ' .
 			       'coordinate column) or supply the 2 values ' .
 			       'is a single space-delimited string ' .
-			       'surrounded by quotes.  If the same column ' .
-			       'is selected for both start and stop ' .
-			       'coordinates, a column will be appended at ' .
-			       'the end of the line to hold the larger ' .
-			       'output value.  The other will be changed in ' .
-			       'place.\n\n' .
+			       "surrounded by quotes.\n\n" .
 			       '* Defaults to the first & second columns if ' .
 			       'there are only 2 columns, or the second & ' .
 			       'third column if there are only 3 columns.  ' .
@@ -79,20 +104,62 @@ addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns|start-col|stop-col=s',
 			       'one column for both.  Required if there are ' .
 			       'more than 3 columns.'));
 
-my $ttid = addOutfileTagteamOption(GETOPTKEY_SUFF   => 'o|outfile-suffix=s',
-				   GETOPTKEY_FILE   => 'outfile=s',
-				   FILETYPEID       => $iid,
-				   PRIMARY          => 1,
-				   DETAIL_DESC_SUFF => ('Extension appended ' .
-							'to file submitted ' .
-							'via -i.'),
-				   DETAIL_DESC_FILE => 'Outfile.',
-				   FORMAT_DESC      => << 'end_format'
+my($dircol);
+addOption(GETOPTKEY   => 'd|direction-column|strand-col',
+	  TYPE        => 'integer',
+	  GETOPTVAL   => \$dircol,
+	  REQUIRED    => 0,
+	  SMRY_DESC   => 'Strand/direction column number.',
+	  DETAIL_DESC => ('Column number of strand information (for the ' .
+			  'column containing values such as "+"/"-", ""/"c", ' .
+			  '"plus"/"minus").  Strand information is nly used ' .
+			  'in 2 cases:  1. When the start and stop ' .
+			  'coordinates have the same value, the strand is ' .
+			  'used to determine whether the padded coordinate ' .
+			  'order is lesser/greater (strand "+") or greater/' .
+			  'lesser (strand "-").  2. When --coord-order is ' .
+			  '"true-start-stop" (which is the default), the ' .
+			  'strand determines whether the lesser value ends ' .
+			  'up in the first (/start) or second (/stop) ' .
+			  'coordinate column.  Coordinate order for features ' .
+			  'spanning the origin on circular chromosomes are ' .
+			  'not currently supported.  Lesser coordinates are ' .
+			  'always made smaller and greater coordinates are ' .
+			  'always made larger.'));
 
-Tab delimited text.  Note, carriage returns will be changed to newline characters.
+my $coord_order = 'keep';
+addOption(GETOPTKEY   => 'coord-order',
+	  GETOPTVAL   => \$coord_order,
+	  TYPE        => 'enum',
+	  REQUIRED    => 0,
+	  ADVANCED    => 1,
+	  DEFAULT     => $coord_order,
+          ACCEPTS     => ['keep','true-start-stop','lesser-greater'],
+	  SMRY_DESC   => 'Ordering strategy of the output coordinate columns.',
+	  DETAIL_DESC => ('Determines whether the lesser and greater ' .
+			  'coordinates end up in the first (start) or ' .
+			  'second (stop) coordinate column.  "keep" will ' .
+			  'leave the lesser/greater order how it was in the ' .
+			  'input file (unless the coordinates are equal, in ' .
+			  'which case, order depends on whether -d has been ' .
+			  'provided - without -f, defaults to "lesser-' .
+			  'greater", otherwise "true-start-stop").  Note the ' .
+			  'first -c column is always treated as the start ' .
+			  'column and the second is treated as the stop ' .
+			  'column.'));
 
-end_format
-				  );
+my $ttid =
+  addOutfileTagteamOption(GETOPTKEY_SUFF   => 'o|outfile-suffix=s',
+			  GETOPTKEY_FILE   => 'outfile=s',
+			  FILETYPEID       => $iid,
+			  PRIMARY          => 1,
+			  DETAIL_DESC_SUFF => ('Extension appended to file ' .
+					       'submitted via -i.'),
+			  DETAIL_DESC_FILE => 'Outfile.',
+			  FORMAT_DESC      => ('Tab delimited text.  Note, ' .
+					       'carriage returns will be ' .
+					       'changed to newline ' .
+					       'characters.'));
 
 processCommandLine();
 
@@ -119,9 +186,10 @@ if(scalar(@$coordcols))
 
 if(defined($startcol))
   {
-    if($startcol =~ /\D/ || $startcol eq '')
+    if($startcol =~ /\D/ || $startcol eq '' || $startcol < 1)
       {
-	error("Invalid column 1 (-c): [$startcol]");
+	error("Invalid coordinate column (-c): [$startcol].  Must be an ",
+	      "integer greater than 0.");
 	quit(2);
       }
     else
@@ -130,15 +198,35 @@ if(defined($startcol))
 
 if(defined($stopcol))
   {
-    if($stopcol =~ /\D/ || $stopcol eq '')
+    if($stopcol =~ /\D/ || $stopcol eq '' || $stopcol < 1)
       {
-	error("Invalid column 2 (-d): [$stopcol]");
+	error("Invalid coordinate column (-c): [$stopcol].  Must be an ",
+	      "integer greater than 0.");
 	quit(2);
       }
     else
       {$stopcol--}
   }
 
+if(defined($dircol))
+  {
+    if($dircol =~ /\D/ || $dircol eq '' || $dircol < 1)
+      {
+	error("Invalid strand column (-d): [$dircol].  Must be an integer ",
+	      "greater than 0.");
+	quit(3);
+      }
+    else
+      {$dircol--}
+  }
+
+if($add_col_strategy eq 'delimiter' && $delimiter eq '')
+  {
+    error("--add-stop-strategy cannot be an empty string.");
+    quit(4);
+  }
+
+my $past_header = 0;
 
 while(nextFileCombo())
   {
@@ -155,78 +243,168 @@ while(nextFileCombo())
 
     my $err = 0;
     my $line_num = 0;
+    my $coord_order_guesses = 0;
+    my $start_stop_evidence = 0;
+    my $less_great_evidence = 0;
+    my $data_count = 0;
 
-    foreach my $pair (map {chomp;[split(/\t/,$_,-1)]} getLine(*IN))
+    foreach my $row (map {chomp;[split(/\t/,$_,-1)]} getLine(*IN))
       {
 	$line_num++;
 
-	if(scalar(@$pair) == 0 || $pair->[0] =~ /^\s*#/)
+	#If commented or empty line
+	if((scalar(@$row) == 1 && $row->[0] eq '') || $row->[0] =~ /^\s*#/)
 	  {
-	    print(join("\t",@$pair),"\n");
+	    #If we're past the header or --header is true
+	    if(!$past_header && headerRequested())
+	      {print(join("\t",@$row),"\n")}
 	    next;
 	  }
 
-	if(!defined($c1) || !defined($c2))
-	  {
-	    if(scalar(@$pair) > 3 || scalar(@$pair) < 2)
-	      {
-		error("There are [",scalar(@$pair),"] columns in file ",
-		      "[$infile].  Both -c and -d are required.  Unable to ",
-		      "process file.",
-		      {DETAIL => ("This number of columns was detected on " .
-				  "line [$line_num].")});
-		$err = 1;
-	      }
-	    elsif(scalar(@$pair) == 2)
-	      {
-		if(!defined($c1))
-		  {$c1 = 0}
-		if(!defined($c2))
-		  {$c2 = 1}
-	      }
-	    elsif(scalar(@$pair) == 3)
-	      {
-		if(!defined($c1))
-		  {$c1 = 1}
-		if(!defined($c2))
-		  {$c2 = 2}
-	      }
-	  }
+	$past_header = 1;
 
-	if(scalar(@$pair) <= $c1 || scalar(@$pair) <= $c2)
+	if(scalar(@$row) <= $c1 || scalar(@$row) <= $c2 ||
+	   $row->[$c1] !~ /\d/  || $row->[$c2] !~ /\d/  ||
+	   (defined($dircol) && scalar(@$row) <= $dircol))
 	  {
-	    error("Not enough columns on line [$line_num]: [",
-		  join("\t",@$pair),"].  Columns required: [",($c1+1),",",
-		  ($c2+1),"].  Leaving unchanged.");
-	    print(join("\t",@$pair),"\n");
-	    next;
-	  }
-	elsif($pair->[$c1] !~ /\d/ || $pair->[$c2] !~ /\d/)
-	  {
-	    error("Invalid coordinate values on line [$line_num]: [",
-		  join("\t",@$pair),"].  Leaving unchanged.");
-	    print(join("\t",@$pair),"\n");
+	    print(join("\t",@$row),"\n");
 	    next;
 	  }
 
-	my($start,$stop) = ($pair->[$c1] <= $pair->[$c2] ?
-			    (((($pair->[$c1] - $s) < 1) ?
-			      1 : ($pair->[$c1] - $s)),
-			     ($pair->[$c2] + $s)) :
-			    (($pair->[$c1] + $s),
-			     ((($pair->[$c2] - $s) < 1) ?
-			      1 : ($pair->[$c2] - $s))));
+	my($strand);
+	if(defined($dircol))
+	  {$strand = $row->[$dircol]}
 
-	$pair->[$c1] = $start;
+	my $orig_order = ($row->[$c1] < $row->[$c2] ? 'forward' :
+			  ($row->[$c1] > $row->[$c2] ? 'reverse' :
+			   (defined($dircol) ?
+			    (getDir($strand) eq 'unknown' ?
+			     'forward' : getDir($strand)) : 'forward')));
+
+	my($lesser,$greater) = ($row->[$c1] <= $row->[$c2] ?
+				(((($row->[$c1] - $s) < 1) ?
+				  1 : ($row->[$c1] - $s)),
+				 ($row->[$c2] + $s)) :
+				(($row->[$c1] + $s),
+				 ((($row->[$c2] - $s) < 1) ?
+				  1 : ($row->[$c2] - $s))));
+	my($start,$stop);
+	if($coord_order eq 'keep')
+	  {
+	    if($orig_order eq 'forward')
+	      {($start,$stop) = ($lesser,$greater)}
+	    else
+	      {($start,$stop) = ($greater,$lesser)}
+
+	    if($row->[$c1] > $row->[$c2])
+	      {$start_stop_evidence++}
+	    if($row->[$c1] < $row->[$c2] &&
+	       defined($dircol) && $strand eq 'reverse')
+	      {$less_great_evidence++}
+	    if($row->[$c1] == $row->[$c2])
+	      {$coord_order_guesses++}
+	  }
+	elsif($coord_order eq 'lesser-greater')
+	  {($start,$stop) = ($lesser,$greater)}
+	elsif($coord_order eq 'true-start-stop')
+	  {
+	    if(defined($dircol))
+	      {
+		#Impose correct order given the strand (assuming linear genome)
+		my $new_order = (getDir($strand) ne 'unknown' ?
+				 getDir($strand) :
+				 (#Infer order from original coord order
+				  $row->[$c1] <= $row->[$c2] ?
+				  'forward' : 'reverse'));
+
+		if($new_order eq 'forward')
+		  {($start,$stop) = ($lesser,$greater)}
+		else
+		  {($start,$stop) = ($greater,$lesser)}
+	      }
+	    else
+	      {
+		#Infer strand from original order
+		if($row->[$c1] <= $row->[$c2])
+		  {($start,$stop) = ($lesser,$greater)}
+		else
+		  {($start,$stop) = ($greater,$lesser)}
+	      }
+	  }
+
+	$row->[$c1] = $start;
 
 	if($c1 == $c2)
-	  {push(@$pair,$stop)}
+	  {
+	    if($add_col_strategy eq 'insert')
+	      {
+		if($c1 == $#{$row})
+		  {push(@$row,$stop)}
+		else
+		  {splice(@$row,$c1+1,0,$stop)}
+	      }
+	    elsif($add_col_strategy eq 'delimiter')
+	      {$row->[$c1] .= $delimiter . $stop}
+	    else
+	      {error("Invalid --add-stop-strategy value: [$add_col_strategy].")}
+	  }
 	else
-	  {$pair->[$c2] = $stop}
+	  {$row->[$c2] = $stop}
 
-	print(join("\t",@$pair),"\n");
+	$data_count++;
+	print(join("\t",@$row),"\n");
       }
+
+    if($coord_order_guesses && !$start_stop_evidence && $less_great_evidence)
+      {error("[$coord_order_guesses] 1nt long coordinate pairs were output in ",
+	     "true-start-stop order, but the rest of the coordinate pairs in ",
+	     "file [$infile] appear to be in lesser-greater order.  Please ",
+	     "rerun with `--coord-order lesser-greater --overwrite` to make ",
+	     "the coordinate order of the output file consistent.")}
+    elsif($coord_order_guesses == $data_count)
+      {warning("Could not determine intended coordinate order in the ",
+	     "coordinate column (e.g. first coordinate column is either ",
+	     "always the lesser coordinate or the true start coordinate).  ",
+	     "All padded coordinates have been output in true-start-stop ",
+	     "order.  Rerun with `--coord-order lesser-greater --overwrite` ",
+	     "to change the coordinate order.")}
 
     closeIn(*IN);
     closeOut(*OUT);
+  }
+
+#Returns forward, reverse, or unknown given a string that is any of: 123..456,
+#123..456c, +, -, plus, minus, for, forward, rev, reverse.
+sub getDir
+  {
+    my $strand    = $_[0];
+    my $suppress  = $_[1];
+    my $direction = 'unknown'; #default
+
+    if(!defined($strand))
+      {
+	error("Strand required.");
+	return($direction);
+      }
+
+    #If this is a coordinate column, look for 'c'
+    if($strand =~ /\d/)
+      {
+	if($strand =~ /c/)
+	  {$direction = 'reverse'}
+	else
+	  {$direction = 'forward'}
+      }
+    else
+      {
+	if($strand =~ /^\s*[\-cmr]/i)
+	  {$direction = 'reverse'}
+	elsif($strand =~ /^\s*[+pf]/i)
+	  {$direction = 'forward'}
+	else
+	  {warning("Unable to determine strand from [$strand].")
+	     unless($suppress)}
+      }
+
+    return($direction);
   }
