@@ -22,7 +22,7 @@ setScriptInfo(VERSION => $VERSION,
               COMPANY => 'Princeton University',
               LICENSE => 'Copyright 2019',
               HELP    => ('This script pads a pair of coordinates by a ' .
-			  'given ammount, e.g. padding coordinates 200,300 ' .
+			  'given amount, e.g. padding coordinates 200,300 ' .
 			  'by 100 would change the coordinates to 100,400.  ' .
 			  'Order of the coordinates is unimportant, e.g. ' .
 			  'padding 300,200 by 100 would yield 400,100.'));
@@ -47,14 +47,81 @@ my $iid = addInfileOption(GETOPTKEY   => 'i|infile=s',
 					  'always be expanded outward.'));
 
 my($s);
-addOption(GETOPTKEY   => 's|size|p|pad=i',
+addOption(GETOPTKEY   => 'p|pad|pad-both-size=i',
 	  GETOPTVAL   => \$s,
-	  REQUIRED    => 1,
-	  SMRY_DESC   => 'Pad ammount.',
-	  DETAIL_DESC => ('Pad ammount.  This value will be subtracted from ' .
+	  SMRY_DESC   => 'Pad amount.',
+	  DETAIL_DESC => ('Pad amount.  This value will be subtracted from ' .
 			  'the lesser coordinate and added to the greater ' .
 			  'coordinate (whichever coordinate column they are ' .
 			  'in).'));
+
+my($pad_start);
+addOption(GETOPTKEY   => 'b|pad-start=i',
+	  GETOPTVAL   => \$pad_start,
+	  SMRY_DESC   => 'Pad amount for the start coordinate.',
+	  DETAIL_DESC => ('Pad amount for the start coordinate.  Requires -d/' .
+			  '--strand-column to determine whether the lesser ' .
+			  'or greater coordinate is the start coordinate.  ' .
+			  'This value will either be subtracted or added to ' .
+			  'the start coordinate value, depending on whether ' .
+			  'the start coordinate is the lesser or greater ' .
+			  'value.  Mutually exclusive with -p, -f, -s, -l, ' .
+			  'and -g.'));
+
+my($pad_stop);
+addOption(GETOPTKEY   => 'e|pad-stop=i',
+	  GETOPTVAL   => \$pad_stop,
+	  SMRY_DESC   => 'Pad amount for the stop coordinate.',
+	  DETAIL_DESC => ('Pad amount for the stop coordinate.  Requires -d/' .
+			  '--strand-column to determine whether the lesser ' .
+			  'or greater coordinate is the stop coordinate.  ' .
+			  'This value will either be subtracted or added to ' .
+			  'the stop coordinate value, depending on whether ' .
+			  'the stop coordinate is the lesser or greater ' .
+			  'value.  Mutually exclusive with -p, -f, -s, -l, ' .
+			  'and -g.'));
+
+my($pad_lesser);
+addOption(GETOPTKEY   => 'b|pad-lesser=i',
+	  GETOPTVAL   => \$pad_lesser,
+	  SMRY_DESC   => 'Pad amount for the lesser coordinate.',
+	  DETAIL_DESC => ('Pad amount for the lesser coordinate.  This value ' .
+			  'will be subtracted from the lesser coordinate ' .
+			  'value.  Mutually exclusive with -p, -f, -s, -b, ' .
+			  'and -e.'));
+
+my($pad_greater);
+addOption(GETOPTKEY   => 'e|pad-greater=i',
+	  GETOPTVAL   => \$pad_greater,
+	  SMRY_DESC   => 'Pad amount for the greater coordinate.',
+	  DETAIL_DESC => ('Pad amount for the greater coordinate.  This ' .
+			  'value will be added to the greater coordinate ' .
+			  'value.  Mutually exclusive with -p, -f, -s, -b, ' .
+			  'and -e.'));
+
+my($pad_first);
+addOption(GETOPTKEY   => 'f|pad-first=i',
+	  GETOPTVAL   => \$pad_first,
+	  SMRY_DESC   => 'Pad amount for the first coordinate column.',
+	  DETAIL_DESC => ('Pad amount for the first coordinate column ' .
+			  'specified with -c.  This value will either be ' .
+			  'subtracted or added to the first coordinate ' .
+			  'column values, depending on whether they have ' .
+			  'the lesser or greater value on each line, ' .
+			  'respectively.  Mutually exclusive with -p, -b, ' .
+			  '-e, -l, and -g.'));
+
+my($pad_second);
+addOption(GETOPTKEY   => 's|pad-second=i',
+	  GETOPTVAL   => \$pad_second,
+	  SMRY_DESC   => 'Pad amount for the second coordinate column.',
+	  DETAIL_DESC => ('Pad amount for the second coordinate column ' .
+			  'specified with -c.  This value will either be ' .
+			  'subtracted or added to the second coordinate ' .
+			  'column values, depending on whether they have the ' .
+			  'lesser or greater value on each line, ' .
+			  'respectively.  Mutually exclusive with -p, -b, ' .
+			  '-e, -l, and -g.'));
 
 my $add_col_strategy = 'insert';
 addOption(GETOPTKEY   => 'add-stop-strategy',
@@ -86,7 +153,7 @@ addOption(GETOPTKEY   => 'add-stop-delimiter',
 
 my($startcol,$stopcol);
 my $coordcols = [];
-addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns|start-col|stop-col=s',
+addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns=s',
 	       GETOPTVAL   => $coordcols,
 	       DEFAULT     => 'auto*',
 	       REQUIRED    => 0,
@@ -105,27 +172,27 @@ addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns|start-col|stop-col=s',
 			       'more than 3 columns.'));
 
 my($dircol);
-addOption(GETOPTKEY   => 'd|direction-column|strand-col',
+addOption(GETOPTKEY   => 'd|strand-column',
 	  TYPE        => 'integer',
 	  GETOPTVAL   => \$dircol,
 	  REQUIRED    => 0,
-	  SMRY_DESC   => 'Strand/direction column number.',
-	  DETAIL_DESC => ('Column number of strand information (for the ' .
-			  'column containing values such as "+"/"-", ""/"c", ' .
-			  '"plus"/"minus").  Strand information is nly used ' .
-			  'in 2 cases:  1. When the start and stop ' .
-			  'coordinates have the same value, the strand is ' .
-			  'used to determine whether the padded coordinate ' .
-			  'order is lesser/greater (strand "+") or greater/' .
-			  'lesser (strand "-").  2. When --coord-order is ' .
+	  SMRY_DESC   => 'Strand column number.',
+	  DETAIL_DESC => ('Strand column number (for the column containing ' .
+			  'values such as "+"/"-", ""/"c", "plus"/"minus", ' .
+			  'or "forward"/"reverse").  Strand information is ' .
+			  'only used for 3 things:  1. If -b or -e are ' .
+			  'supplied, the strand is used to determine whish ' .
+			  'of the lesser/greater coordinates is the start/' .
+			  'stop.  2. When the start and stop coordinates ' .
+			  'have the same value, the strand is used to ' .
+			  'determine whether the padded coordinate order is ' .
+			  'lesser/greater (strand "+") or greater/lesser ' .
+			  '(strand "-").  3. When --coord-order is ' .
 			  '"true-start-stop" (which is the default), the ' .
 			  'strand determines whether the lesser value ends ' .
 			  'up in the first (/start) or second (/stop) ' .
-			  'coordinate column.  Coordinate order for features ' .
-			  'spanning the origin on circular chromosomes are ' .
-			  'not currently supported.  Lesser coordinates are ' .
-			  'always made smaller and greater coordinates are ' .
-			  'always made larger.'));
+			  'coordinate column.\n\nCircular chromosomes are ' .
+			  'not currently supported.'));
 
 my $coord_order = 'keep';
 addOption(GETOPTKEY   => 'coord-order',
@@ -163,10 +230,78 @@ my $ttid =
 
 processCommandLine();
 
-if($s < 0)
+my $both = (defined($s)                                   ? 1 : 0);
+my $be   = (defined($pad_start)  || defined($pad_stop)    ? 1 : 0);
+my $fs   = (defined($pad_first)  || defined($pad_second)  ? 1 : 0);
+my $lg   = (defined($pad_lesser) || defined($pad_greater) ? 1 : 0);
+my $sumt = $both + $be + $fs + $lg;
+
+if($sumt == 0)
   {
-    error("Invalid pad size (-s): [$s]");
+    error("A pad amount is required (see -p, -b or -e, -l or -g, or -f or ",
+	  "-s).");
     quit(1);
+  }
+elsif($sumt > 1)
+  {
+    error("Mutually exclusive pad amounts supplied.  The following groups of ",
+	  "options are incompatible with one another: [(",
+	  join('),(',
+	       grep {defined} (($both ? '-p' : undef),
+			       ($be ? ($pad_start && $pad_stop ? '-b,-e' :
+				       ($pad_start ? '-b' : '-e')) : undef),
+			       ($fs ? ($pad_first && $pad_second ? '-f,-s' :
+				       ($pad_first ? '-f' : '-s')) : undef),
+			       ($lg ? ($pad_lesser && $pad_greater ? '-l,-g' :
+				       ($pad_lesser ? '-l' : '-g')) : undef))),
+	  ")].");
+    quit(2);
+  }
+
+my $fatal = 0;
+if(defined($s) && $s < 1)
+  {
+    error("Invalid pad size (-p): [$s].  Must be an unsigned integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_first) && $pad_first < 1)
+  {
+    error("Invalid pad size (-f): [$pad_first].  Must be an unsigned integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_second) && $pad_second < 1)
+  {
+    error("Invalid pad size (-s): [$pad_second].  Must be an unsigned ",
+	  "integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_start) && $pad_start < 1)
+  {
+    error("Invalid pad size (-b): [$pad_start].  Must be an unsigned integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_stop) && $pad_stop < 1)
+  {
+    error("Invalid pad size (-e): [$pad_stop].  Must be an unsigned integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_lesser) && $pad_lesser < 1)
+  {
+    error("Invalid pad size (-l): [$pad_lesser].  Must be an unsigned ",
+	  "integer.");
+    $fatal = 1;
+  }
+
+if(defined($pad_greater) && $pad_greater < 1)
+  {
+    error("Invalid pad size (-g): [$pad_greater].  Must be an unsigned ",
+	  "integer.");
+    $fatal = 1;
   }
 
 if(scalar(@$coordcols))
@@ -190,7 +325,7 @@ if(defined($startcol))
       {
 	error("Invalid coordinate column (-c): [$startcol].  Must be an ",
 	      "integer greater than 0.");
-	quit(2);
+	$fatal = 1;
       }
     else
       {$startcol--}
@@ -202,7 +337,7 @@ if(defined($stopcol))
       {
 	error("Invalid coordinate column (-c): [$stopcol].  Must be an ",
 	      "integer greater than 0.");
-	quit(2);
+	$fatal = 1;
       }
     else
       {$stopcol--}
@@ -214,7 +349,7 @@ if(defined($dircol))
       {
 	error("Invalid strand column (-d): [$dircol].  Must be an integer ",
 	      "greater than 0.");
-	quit(3);
+	$fatal = 1;
       }
     else
       {$dircol--}
@@ -223,8 +358,11 @@ if(defined($dircol))
 if($add_col_strategy eq 'delimiter' && $delimiter eq '')
   {
     error("--add-stop-strategy cannot be an empty string.");
-    quit(4);
+    $fatal = 1;
   }
+
+if($fatal)
+  {quit(1)}
 
 my $past_header = 0;
 
