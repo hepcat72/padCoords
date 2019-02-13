@@ -58,7 +58,6 @@ addOption(GETOPTKEY   => 'p|pad|pad-both-size=i',
 my($pad_start);
 addOption(GETOPTKEY   => 'b|pad-start=i',
 	  GETOPTVAL   => \$pad_start,
-	  SMRY_DESC   => 'Pad amount for the start coordinate.',
 	  DETAIL_DESC => ('Pad amount for the start coordinate.  Requires -d/' .
 			  '--strand-column to determine whether the lesser ' .
 			  'or greater coordinate is the start coordinate.  ' .
@@ -71,7 +70,6 @@ addOption(GETOPTKEY   => 'b|pad-start=i',
 my($pad_stop);
 addOption(GETOPTKEY   => 'e|pad-stop=i',
 	  GETOPTVAL   => \$pad_stop,
-	  SMRY_DESC   => 'Pad amount for the stop coordinate.',
 	  DETAIL_DESC => ('Pad amount for the stop coordinate.  Requires -d/' .
 			  '--strand-column to determine whether the lesser ' .
 			  'or greater coordinate is the stop coordinate.  ' .
@@ -82,18 +80,16 @@ addOption(GETOPTKEY   => 'e|pad-stop=i',
 			  'and -g.'));
 
 my($pad_lesser);
-addOption(GETOPTKEY   => 'b|pad-lesser=i',
+addOption(GETOPTKEY   => 'l|pad-lesser=i',
 	  GETOPTVAL   => \$pad_lesser,
-	  SMRY_DESC   => 'Pad amount for the lesser coordinate.',
 	  DETAIL_DESC => ('Pad amount for the lesser coordinate.  This value ' .
 			  'will be subtracted from the lesser coordinate ' .
 			  'value.  Mutually exclusive with -p, -f, -s, -b, ' .
 			  'and -e.'));
 
 my($pad_greater);
-addOption(GETOPTKEY   => 'e|pad-greater=i',
+addOption(GETOPTKEY   => 'g|pad-greater=i',
 	  GETOPTVAL   => \$pad_greater,
-	  SMRY_DESC   => 'Pad amount for the greater coordinate.',
 	  DETAIL_DESC => ('Pad amount for the greater coordinate.  This ' .
 			  'value will be added to the greater coordinate ' .
 			  'value.  Mutually exclusive with -p, -f, -s, -b, ' .
@@ -102,7 +98,6 @@ addOption(GETOPTKEY   => 'e|pad-greater=i',
 my($pad_first);
 addOption(GETOPTKEY   => 'f|pad-first=i',
 	  GETOPTVAL   => \$pad_first,
-	  SMRY_DESC   => 'Pad amount for the first coordinate column.',
 	  DETAIL_DESC => ('Pad amount for the first coordinate column ' .
 			  'specified with -c.  This value will either be ' .
 			  'subtracted or added to the first coordinate ' .
@@ -114,7 +109,6 @@ addOption(GETOPTKEY   => 'f|pad-first=i',
 my($pad_second);
 addOption(GETOPTKEY   => 's|pad-second=i',
 	  GETOPTVAL   => \$pad_second,
-	  SMRY_DESC   => 'Pad amount for the second coordinate column.',
 	  DETAIL_DESC => ('Pad amount for the second coordinate column ' .
 			  'specified with -c.  This value will either be ' .
 			  'subtracted or added to the second coordinate ' .
@@ -151,9 +145,9 @@ addOption(GETOPTKEY   => 'add-stop-delimiter',
 			  'delimiter when joining padded coordinates in a ' .
 			  'single column.'));
 
-my($startcol,$stopcol);
+my($coord1col,$coord2col);
 my $coordcols = [];
-addArrayOption(GETOPTKEY   => 'c|c1|c2|coord-columns=s',
+addArrayOption(GETOPTKEY   => 'c|coord-columns=s',
 	       GETOPTVAL   => $coordcols,
 	       DEFAULT     => 'auto*',
 	       REQUIRED    => 0,
@@ -176,7 +170,6 @@ addOption(GETOPTKEY   => 'd|strand-column',
 	  TYPE        => 'integer',
 	  GETOPTVAL   => \$dircol,
 	  REQUIRED    => 0,
-	  SMRY_DESC   => 'Strand column number.',
 	  DETAIL_DESC => ('Strand column number (for the column containing ' .
 			  'values such as "+"/"-", ""/"c", "plus"/"minus", ' .
 			  'or "forward"/"reverse").  Strand information is ' .
@@ -338,40 +331,40 @@ if(defined($pad_greater) && $pad_greater < 1)
 if(scalar(@$coordcols))
   {
     if(scalar(@$coordcols) == 2)
-      {($startcol,$stopcol) = @$coordcols}
+      {($coord1col,$coord2col) = @$coordcols}
     elsif(scalar(@$coordcols) == 1)
-      {$startcol = $coordcols->[0]}
+      {$coord1col = $coordcols->[0]}
     else
       {
 	error("Too many coordinate columns supplied to -c.  These column ",
 	      "numbers will be ignored: [",
 	      join(',',@{$coordcols}[2..$#{$coordcols}]),"].");
-	($startcol,$stopcol) = @{$coordcols}[0,1];
+	($coord1col,$coord2col) = @{$coordcols}[0,1];
       }
   }
 
-if(defined($startcol))
+if(defined($coord1col))
   {
-    if($startcol =~ /\D/ || $startcol eq '' || $startcol < 1)
+    if($coord1col =~ /\D/ || $coord1col eq '' || $coord1col < 1)
       {
-	error("Invalid coordinate column (-c): [$startcol].  Must be an ",
+	error("Invalid coordinate column (-c): [$coord1col].  Must be an ",
 	      "integer greater than 0.");
 	$fatal = 1;
       }
     else
-      {$startcol--}
+      {$coord1col--}
   }
 
-if(defined($stopcol))
+if(defined($coord2col))
   {
-    if($stopcol =~ /\D/ || $stopcol eq '' || $stopcol < 1)
+    if($coord2col =~ /\D/ || $coord2col eq '' || $coord2col < 1)
       {
-	error("Invalid coordinate column (-c): [$stopcol].  Must be an ",
+	error("Invalid coordinate column (-c): [$coord2col].  Must be an ",
 	      "integer greater than 0.");
 	$fatal = 1;
       }
     else
-      {$stopcol--}
+      {$coord2col--}
   }
 
 if(defined($dircol))
@@ -401,8 +394,8 @@ while(nextFileCombo())
   {
     #If startcol or stopcol are undefined, they will be set anew for each input
     #file
-    my $c1 = $startcol;
-    my $c2 = $stopcol;
+    my $c1 = $coord1col;
+    my $c2 = $coord2col;
 
     my $infile  = getInfile($iid);
     my $outfile = getOutfile($ttid);
@@ -450,13 +443,15 @@ while(nextFileCombo())
 			    (getDir($strand) eq 'unknown' ?
 			     'forward' : getDir($strand)) : 'forward')));
 
-	my($lesser,$greater) = ($row->[$c1] <= $row->[$c2] ?
-				(((($row->[$c1] - $s) < 1) ?
-				  1 : ($row->[$c1] - $s)),
-				 ($row->[$c2] + $s)) :
-				(($row->[$c1] + $s),
-				 ((($row->[$c2] - $s) < 1) ?
-				  1 : ($row->[$c2] - $s))));
+	my($lesser,$greater) = pad($row->[$c1],$row->[$c2],
+				   $orig_order,
+				   $strand,
+				   $both,$be,$fs,$lg,
+				   $s,
+				   $pad_start,$pad_stop,
+				   $pad_first,$pad_second,
+				   $pad_lesser,$pad_greater);
+
 	my($start,$stop);
 	if($coord_order eq 'keep')
 	  {
@@ -576,4 +571,99 @@ sub getDir
       }
 
     return($direction);
+  }
+
+sub pad
+  {
+    my $c1          = $_[0];
+    my $c2          = $_[1];
+    my $orig_order  = $_[2];
+    my $strand      = $_[3];
+    my $both        = $_[4];
+    my $be          = $_[5];
+    my $fs          = $_[6];
+    my $lg          = $_[7];
+    my $s           = $_[8];
+    my $pad_start   = $_[9];
+    my $pad_stop    = $_[10];
+    my $pad_first   = $_[11];
+    my $pad_second  = $_[12];
+    my $pad_lesser  = $_[13];
+    my $pad_greater = $_[14];
+
+    my($lesser,$greater) = ($row->[$c1] <= $row->[$c2] ?
+			    ($row->[$c1],$row->[$c2]) :
+			    ($row->[$c2],$row->[$c1]));
+
+    if($both)
+      {
+	$lesser  -= $s;
+	$greater += $s;
+      }
+    elsif($be)
+      {
+	my $lesser_is_start = 1;
+	#Determine whether the larger or lesser coord is the start
+	if(defined($strand))
+	  {
+	    if($strand eq 'forward')
+	      {$lesser_is_start = 1}
+	    elsif($strand eq 'reverse')
+	      {$lesser_is_start = 0}
+	    #Infer start column from coord order, defaulting to forward
+	    elsif($orig_order eq 'reverse')
+	      {$lesser_is_start = 0}
+	  }
+	else
+	  {
+	    #Infer start column from coord order, defaulting to forward
+	    if($orig_order eq 'reverse')
+	      {$lesser_is_start = 0}
+	  }
+	if(defined($pad_start))
+	  {
+	    if($lesser_is_start)
+	      {$lesser -= $pad_start}
+	    else
+	      {$greater += $pad_start}
+	  }
+	if(defined($pad_stop))
+	  {
+	    if($lesser_is_start)
+	      {$greater += $pad_stop}
+	    else
+	      {$lesser -= $pad_stop}
+	  }
+      }
+    elsif($fs)
+      {
+	my $lesser_is_first = 1;
+	if($row->[$c1] > $row->[$c2])
+	  {$lesser_is_first = 0}
+	if(defined($pad_first))
+	  {
+	    if($lesser_is_first)
+	      {$lesser -= $pad_first}
+	    else
+	      {$greater += $pad_first}
+	  }
+	if(defined($pad_second))
+	  {
+	    if($lesser_is_first)
+	      {$greater += $pad_second}
+	    else
+	      {$lesser -= $pad_second}
+	  }
+      }
+    elsif($lg)
+      {
+	if(defined($pad_lesser))
+	  {$lesser -= $pad_lesser}
+	if(defined($pad_greater))
+	  {$greater += $pad_greater}
+      }
+    else
+      {error("No pad strategy supplied.")}
+
+    return($lesser,$greater);
   }
