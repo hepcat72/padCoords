@@ -230,6 +230,8 @@ my $ttid =
 
 processCommandLine();
 
+my $fatal = 0;
+
 my $both = (defined($s)                                   ? 1 : 0);
 my $be   = (defined($pad_start)  || defined($pad_stop)    ? 1 : 0);
 my $fs   = (defined($pad_first)  || defined($pad_second)  ? 1 : 0);
@@ -240,7 +242,7 @@ if($sumt == 0)
   {
     error("A pad amount is required (see -p, -b or -e, -l or -g, or -f or ",
 	  "-s).");
-    quit(1);
+    $fatal = 1;
   }
 elsif($sumt > 1)
   {
@@ -254,11 +256,40 @@ elsif($sumt > 1)
 				       ($pad_first ? '-f' : '-s')) : undef),
 			       ($lg ? ($pad_lesser && $pad_greater ? '-l,-g' :
 				       ($pad_lesser ? '-l' : '-g')) : undef))),
-	  ")].");
-    quit(2);
+	  ")].",
+	  {DETAIL => join('',('-p, -b or -e, -f or -s, and -l or -g are ',
+			      'mutually exclusive.  E.g. You can use -b and ',
+			      '-e together to specify a pad size for the ',
+			      'start and stop coordinates respectively, but ',
+			      'the use either one means you cannot use any of ',
+			      'the others (-p, -f, -s, -l, or -g) because ',
+			      'they are different strategies for specifying ',
+			      'the pad size and may conflict.'))});
+    $fatal = 1;
   }
 
-my $fatal = 0;
+if($be && !defined($dircol))
+  {
+    error("A strand column (-d) must be supplied if either a start or stop ",
+	  "coordinate column (-b or -e) are supplied.");
+    $fatal = 1;
+  }
+
+if($be && scalar(@$coordcols) != 2)
+  {
+    error("Exactly 2 coordinate columns must be specified if either -b or -e ",
+	  "are supplied, but [",scalar(@$coordcols),"] coordinate columns ",
+	  "were supplied.",
+	  {DETAIL =>
+	   join('',('Some tab-deliminted formats always put the lesser and ',
+		    'greater coordinates in specific columns regardless of ',
+		    'strand while other formats put the start and stop in ',
+		    'specific columns regardless of which coordinate is ',
+		    'greater.  To be sure we know whether to add or subtract ',
+		    'the pad value, both columns are required.'))});
+    $fatal = 1;
+  }
+
 if(defined($s) && $s < 1)
   {
     error("Invalid pad size (-p): [$s].  Must be an unsigned integer.");
